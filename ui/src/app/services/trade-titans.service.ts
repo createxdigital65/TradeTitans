@@ -40,8 +40,22 @@ export class TradeTitansService {
   runCouncil(symbol: string, portfolioValue: number = 100000, useOptions: boolean = true): Observable<FullCouncilRunResponse | null> {
     return this.http.post<FullCouncilRunResponse>(`${this.baseUrl}/council/run/${symbol}?portfolioValue=${portfolioValue}&useOptions=${useOptions}`, {}).pipe(
       catchError((err) => {
-        console.error('Error calling ASP.NET Core orchestrator, loading mock fallback:', err);
-        return of(this.getMockFullCouncilRun(symbol));
+        // CASE 3: Backend reachable but upstream symbol failure (HTTP 502).
+        // The Python analytics service rejected the symbol — do NOT fabricate a demo session.
+        if (err?.status === 502) {
+          const upstreamMsg = err?.error?.error || 'Market analytics service could not process this symbol.';
+          console.error(`Symbol unavailable for ${symbol}:`, upstreamMsg);
+          return of(null);
+        }
+        // CASE 4: Backend genuinely unavailable (connection refused, network error, status 0).
+        // Retain demo fallback for demonstration purposes — clearly labeled, Confirm disabled.
+        if (err?.status === 0) {
+          console.error('Backend unreachable, loading mock fallback:', err);
+          return of(this.getMockFullCouncilRun(symbol));
+        }
+        // Any other unexpected error — do not fabricate data.
+        console.error(`Unexpected error running council for ${symbol}:`, err);
+        return of(null);
       })
     );
   }

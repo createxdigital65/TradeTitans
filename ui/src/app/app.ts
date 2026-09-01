@@ -99,12 +99,28 @@ export class App implements OnInit {
         } else {
           this.showNotification('AI Council finished. VETOED BY RISK GUARDIAN!', 'danger');
         }
+      } else {
+        // CASE 3: Symbol unsupported by upstream — no demo data fabricated.
+        this.showNotification('Symbol unavailable — the market analytics service could not provide data for this symbol. Please try another supported symbol.', 'danger');
       }
     });
   }
 
+  /**
+   * Detects whether the current council run came from the mock fallback (backend unavailable).
+   * Mock data uses 'demo-session-' prefix IDs that are NOT valid GUIDs and do NOT exist in the DB.
+   * Confirm/cancel must be disabled for mock data — there is nothing to confirm.
+   */
+  isMockData(): boolean {
+    return this.currentCouncilRun?.session?.id?.startsWith('demo-session-') ?? false;
+  }
+
   confirmExecutePaperTrade(): void {
     if (!this.currentCouncilRun) return;
+    if (this.isMockData()) {
+      this.showNotification('Cannot confirm: this is DEMO DATA because the backend was unavailable. Start the backend to run a real council.', 'danger');
+      return;
+    }
     const sessionId = this.currentCouncilRun.session?.id;
     if (!sessionId) return;
 
@@ -136,6 +152,11 @@ export class App implements OnInit {
 
     cancelPendingTrade(): void {
     if (!this.currentCouncilRun) return;
+    if (this.isMockData()) {
+      this.currentCouncilRun = null;
+      this.showNotification('DEMO DATA cleared. No real session was cancelled.', 'warning');
+      return;
+    }
     const sessionId = this.currentCouncilRun.session?.id;
     if (!sessionId) return;
 

@@ -428,17 +428,22 @@
               <button
                 class="btn-primary"
                 style="flex: 1; justify-content: center; padding: 0.8rem;"
-                [disabled]="!currentCouncilRun.riskAssessment.approved || isExecutingOrder"
-                [style.opacity]="currentCouncilRun.riskAssessment.approved ? 1 : 0.4"
+                [disabled]="isMockData() || !currentCouncilRun.riskAssessment.approved || isExecutingOrder"
+                [style.opacity]="isMockData() || !currentCouncilRun.riskAssessment.approved ? 0.4 : 1"
                 (click)="confirmExecutePaperTrade()">
-                <span>{{ isExecutingOrder ? 'EXECUTING ORDER...' : (currentCouncilRun.riskAssessment.approved ? '⚡ CONFIRM & EXECUTE VIA ALPACA PAPER' : '🚫 EXECUTION BLOCKED BY RISK GUARDIAN') }}</span>
+                <span>{{ isExecutingOrder ? 'EXECUTING ORDER...' : (isMockData() ? '⚠ DEMO DATA — CONFIRM DISABLED' : (currentCouncilRun.riskAssessment.approved ? '⚡ CONFIRM & EXECUTE VIA ALPACA PAPER' : '🚫 EXECUTION BLOCKED BY RISK GUARDIAN')) }}</span>
               </button>
               <button
                 style="flex: 1; justify-content: center; padding: 0.8rem; background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: 8px; font-weight: 700; cursor: pointer;"
-                [disabled]="isExecutingOrder"
+                [disabled]="isMockData() || isExecutingOrder"
+                [style.opacity]="isMockData() ? 0.4 : 1"
                 (click)="cancelPendingTrade()">
-                <span>✖ CANCEL — DO NOT TRADE</span>
+                <span>{{ isMockData() ? '✖ CLEAR DEMO DATA' : '✖ CANCEL — DO NOT TRADE' }}</span>
               </button>
+            </div>
+            <div *ngIf="isMockData() && currentCouncilRun.session.sessionStatus === 'PENDING_CONFIRMATION'"
+                 style="margin-top: 0.75rem; padding: 0.6rem; border: 1px dashed var(--accent-yellow); border-radius: 6px; font-size: 0.8rem; color: var(--accent-yellow); text-align: center;">
+              ⚠ DEMO DATA — backend was unavailable when this council ran. The session ID is not a real GUID. Confirm/Cancel disabled. Start the backend and re-run the council to enable confirmation.
             </div>
             <div *ngIf="currentCouncilRun.session.sessionStatus !== 'PENDING_CONFIRMATION'"
                  style="margin-top: 1rem; text-align: center; padding: 0.75rem; border: 1px dashed var(--border-color); border-radius: 8px; color: var(--text-muted); font-size: 0.85rem;">
