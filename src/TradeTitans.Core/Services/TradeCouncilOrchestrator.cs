@@ -126,6 +126,7 @@ public class TradeCouncilOrchestrator : ITradeCouncilOrchestrator
                 ActualValue = rule.ActualValue,
                 Passed = rule.Passed,
                 Details = rule.Explanation,
+                Phase = "CONFIRMATION_RECHECK",
                 Timestamp = DateTime.UtcNow
             };
             session.RiskLogs.Add(riskLog);
@@ -304,6 +305,7 @@ public class TradeCouncilOrchestrator : ITradeCouncilOrchestrator
                 ActualValue = rule.ActualValue,
                 Passed = rule.Passed,
                 Details = rule.Explanation,
+                Phase = "INITIAL_EVALUATION",
                 Timestamp = DateTime.UtcNow
             });
         }

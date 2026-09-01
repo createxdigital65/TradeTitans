@@ -332,6 +332,8 @@ public class ChiefTraderAndOrchestratorTests
 
         Assert.Equal(4, session.AgentProposals.Count);                 // bull, bear, hype, challenger
         Assert.Equal(8, session.RiskLogs.Count);                       // 4 run + 4 confirm-time
+        Assert.Equal(4, session.RiskLogs.Count(r => r.Phase == "INITIAL_EVALUATION"));     // phase 1 evaluation
+        Assert.Equal(4, session.RiskLogs.Count(r => r.Phase == "CONFIRMATION_RECHECK"));   // phase 2 re-check
         Assert.False(string.IsNullOrEmpty(session.CouncilResultJson)); // full debate payload
         Assert.All(session.RiskLogs, r => Assert.False(string.IsNullOrEmpty(r.Threshold)));
         Assert.All(session.RiskLogs, r => Assert.False(string.IsNullOrEmpty(r.ActualValue)));

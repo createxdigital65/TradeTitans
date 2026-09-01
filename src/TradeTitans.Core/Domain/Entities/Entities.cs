@@ -73,6 +73,7 @@ public class RiskCheckLog
     public string ActualValue { get; set; } = string.Empty;
     public bool Passed { get; set; }
     public string Details { get; set; } = string.Empty;
+    public string Phase { get; set; } = "INITIAL_EVALUATION"; // evaluation pass: INITIAL_EVALUATION | CONFIRMATION_RECHECK
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
     [JsonIgnore]

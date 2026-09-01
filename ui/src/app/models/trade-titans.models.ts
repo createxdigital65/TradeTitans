@@ -179,6 +179,8 @@ export interface RiskCheckLogUi {
   actualValue: string;
   passed: boolean;
   details: string;
+  /** Evaluation pass that produced this log: INITIAL_EVALUATION | CONFIRMATION_RECHECK */
+  phase?: string;
   timestamp: string;
 }
 
