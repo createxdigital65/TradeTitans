@@ -1,0 +1,40 @@
+# ===== .NET =====
+bin/
+obj/
+.vs/
+*.user
+*.suo
+appsettings.Development.json
+
+# ===== Node / Angular =====
+node_modules/
+dist/
+.angular/
+coverage/
+npm-debug.log*
+yarn-error.log*
+
+# ===== Local databases (SQLite) =====
+*.db
+*.db-shm
+*.db-wal
+
+# ===== Logs =====
+*.log
+
+# ===== Secrets / environment =====
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.pfx
+
+# ===== Local temp / verification artifacts =====
+phase1-result.json
+verify-session1.json
+e2e-*.json
+
+# ===== OS =====
+Thumbs.db
+.DS_Store

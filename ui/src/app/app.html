@@ -1,0 +1,599 @@
+<!-- Trade Titans Hackathon Command Center -->
+<div class="app-wrapper">
+  <!-- Top Navigation Header -->
+  <header class="navbar">
+    <div class="brand">
+      <span class="brand-logo">⚔️</span>
+      <span class="brand-title">TRADE TITANS</span>
+      <span class="paper-badge">ALPACA PAPER TRADING ONLY</span>
+    </div>
+
+    <div class="sys-status">
+      <div class="status-item">
+        <span class="status-dot" [ngClass]="{'online': systemStatus.pythonServiceConnected, 'warning': !systemStatus.pythonServiceConnected}"></span>
+        <span class="mono" style="font-size: 0.85rem;">PYTHON API: {{ systemStatus.pythonServiceConnected ? 'ONLINE (VERCEL)' : 'DEMO MOCK' }}</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot online"></span>
+        <span class="mono" style="font-size: 0.85rem;">RISK GUARDIAN: ACTIVE</span>
+      </div>
+
+      <!-- Tab Buttons -->
+      <div class="nav-tabs">
+        <button class="nav-btn" [class.active]="activeTab === 'command-center'" (click)="setTab('command-center')">Command Center</button>
+        <button class="nav-btn" [class.active]="activeTab === 'portfolio'" (click)="setTab('portfolio')">Portfolio</button>
+        <button class="nav-btn" [class.active]="activeTab === 'audit-history'" (click)="setTab('audit-history')">Audit & Veto Logs</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Global Alert / Toast Notification -->
+  <div *ngIf="notification" class="container" style="padding-bottom: 0;">
+    <div class="risk-banner" [ngClass]="{'approved': notification.type === 'success', 'vetoed': notification.type === 'danger'}" style="margin-bottom: 0.5rem;">
+      <span>{{ notification.message }}</span>
+      <button style="background:none; border:none; color:inherit; font-weight:800; cursor:pointer;" (click)="notification = null">✕</button>
+    </div>
+  </div>
+
+  <!-- Main Content Container -->
+  <main class="container">
+    
+    <!-- ==================== TAB 1: COMMAND CENTER ==================== -->
+    <div *ngIf="activeTab === 'command-center'">
+      
+      <!-- Symbol Search Bar -->
+      <div class="search-box">
+        <div class="search-input-group">
+          <input type="text" class="search-input" [(ngModel)]="symbolInput" (keyup.enter)="onSymbolSearch()" placeholder="ENTER SYMBOL (E.G. AAPL)" />
+          <button class="btn-primary" (click)="onSymbolSearch()">SEARCH</button>
+        </div>
+
+        <div class="quick-picks">
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">QUICK TARGETS:</span>
+          <button class="quick-chip" (click)="selectQuickPick('AAPL')">AAPL</button>
+          <button class="quick-chip" (click)="selectQuickPick('NVDA')">NVDA</button>
+          <button class="quick-chip" (click)="selectQuickPick('TSLA')">TSLA</button>
+          <button class="quick-chip" (click)="selectQuickPick('MSFT')">MSFT</button>
+          <button class="quick-chip" (click)="selectQuickPick('AMZN')">AMZN</button>
+        </div>
+
+        <button class="btn-primary" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));" (click)="runCouncilDebate()" [disabled]="isLoading">
+          <span>⚡ RUN AI COUNCIL DEBATE</span>
+        </button>
+      </div>
+
+      <!-- Market Snapshot & Account Summary Top Bar -->
+      <div class="grid-4">
+        <div class="card">
+          <div class="card-title">MARKET PRICE
+            <span *ngIf="systemStatus.status !== 'checking...' && !systemStatus.pythonServiceConnected" class="paper-badge" style="margin-left: 0.4rem;">DEMO DATA</span>
+          </div>
+          <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-cyan);">
+            ${{ currentSnapshot?.price || 224.50 | number:'1.2-2' }}
+          </div>
+          <div class="mono" style="font-size: 0.85rem;" [style.color]="(currentSnapshot?.change_pct || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'">
+            {{ (currentSnapshot?.change_pct || 0) >= 0 ? '+' : '' }}{{ currentSnapshot?.change_pct || 1.54 }}%
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">20D VOLUME RATIO</div>
+          <div class="mono" style="font-size: 1.6rem; font-weight: 800;">
+            {{ currentSnapshot?.volume_ratio || 0.93 | number:'1.2-2' }}x
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">
+            Avg Volume: {{ (currentSnapshot?.avg_volume_20d || 52000000) / 1000000 | number:'1.1-1' }}M
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">20D VOLATILITY</div>
+          <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-yellow);">
+            {{ (currentSnapshot?.volatility_20d || 0.185) * 100 | number:'1.1-1' }}%
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">Annualized StDev</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">ACCOUNT CASH / EQUITY</div>
+          <div class="mono" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-green);">
+            ${{ accountInfo?.cash || '100,000.00' }}
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">
+            Buying Power: ${{ accountInfo?.buying_power || '400,000.00' }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Visualization Header -->
+      <div class="debate-flow">
+        <div class="card-title">DECISION PIPELINE FLOW — "BEFORE AI TRADES, MAKE AI ARGUE"</div>
+        <div class="flow-steps">
+          <div class="flow-step active">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STEP 1</div>
+            <div style="font-weight: 700;">MARKET DATA</div>
+          </div>
+          <span class="flow-arrow">→</span>
+
+          <div class="flow-step" [class.active]="currentCouncilRun">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STEP 2</div>
+            <div style="font-weight: 700;">BULL VS BEAR</div>
+          </div>
+          <span class="flow-arrow">→</span>
+
+          <div class="flow-step" [class.active]="currentCouncilRun">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STEP 3</div>
+            <div style="font-weight: 700;">HYPE INVESTIGATOR</div>
+          </div>
+          <span class="flow-arrow">→</span>
+
+          <div class="flow-step" [class.active]="currentCouncilRun">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STEP 4</div>
+            <div style="font-weight: 700;">CHALLENGER AGENT</div>
+          </div>
+          <span class="flow-arrow">→</span>
+
+          <div class="flow-step" [class.active]="currentCouncilRun?.riskAssessment">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STEP 5</div>
+            <div style="font-weight: 700;" [style.color]="currentCouncilRun?.riskAssessment?.approved ? 'var(--accent-green)' : 'var(--accent-red)'">
+              RISK GUARDIAN
+            </div>
+          </div>
+          <span class="flow-arrow">→</span>
+
+          <div class="flow-step" [class.active]="currentCouncilRun?.executionResult">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STEP 6</div>
+            <div style="font-weight: 700;">CHIEF TRADER / ALPACA</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="card" style="text-align: center; padding: 3rem; margin-bottom: 1.5rem;">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
+        <div style="font-weight: 700; font-size: 1.2rem;">AI COUNCIL DEBATING {{ selectedSymbol }}...</div>
+        <div style="color: var(--text-muted); margin-top: 0.5rem;">Consulting Bull, Bear, Hype Investigator, Challenger, and Risk Guardian</div>
+      </div>
+
+      <!-- AI Council Debate Grid (4 Specialist Agents) -->
+      <div *ngIf="currentCouncilRun && !isLoading" class="grid-4">
+        
+        <!-- Bull Agent Card -->
+        <div class="card agent-card bull">
+          <div class="agent-header">
+            <div class="agent-name">🐂 BULL AGENT</div>
+            <span class="verdict-tag" [ngClass]="currentCouncilRun.councilRunResult.bull.decision.toLowerCase()">
+              {{ currentCouncilRun.councilRunResult.bull.decision }}
+            </span>
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">
+            Confidence: {{ currentCouncilRun.councilRunResult.bull.confidence }}%
+            <span *ngIf="currentCouncilRun.councilRunResult.bull.is_fallback" style="color: var(--accent-yellow); font-weight: 700;"> ⚠ FALLBACK — LLM UNAVAILABLE</span>
+          </div>
+          <div class="confidence-bar">
+            <div class="confidence-fill" [style.width.%]="currentCouncilRun.councilRunResult.bull.confidence"></div>
+          </div>
+          <div class="thesis-text">{{ currentCouncilRun.councilRunResult.bull.thesis }}</div>
+          <div *ngIf="currentCouncilRun.councilRunResult.bull.evidence?.length">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-top: 0.5rem;">EVIDENCE:</div>
+            <ul style="font-size: 0.8rem; padding-left: 1rem; color: var(--text-main);">
+              <li *ngFor="let ev of currentCouncilRun.councilRunResult.bull.evidence">{{ ev }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Bear Agent Card -->
+        <div class="card agent-card bear">
+          <div class="agent-header">
+            <div class="agent-name">🐻 BEAR AGENT</div>
+            <span class="verdict-tag" [ngClass]="currentCouncilRun.councilRunResult.bear.decision.toLowerCase()">
+              {{ currentCouncilRun.councilRunResult.bear.decision }}
+            </span>
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">
+            Confidence: {{ currentCouncilRun.councilRunResult.bear.confidence }}%
+            <span *ngIf="currentCouncilRun.councilRunResult.bear.is_fallback" style="color: var(--accent-yellow); font-weight: 700;"> ⚠ FALLBACK — LLM UNAVAILABLE</span>
+          </div>
+          <div class="confidence-bar">
+            <div class="confidence-fill" [style.width.%]="currentCouncilRun.councilRunResult.bear.confidence" style="background: var(--accent-red);"></div>
+          </div>
+          <div class="thesis-text">{{ currentCouncilRun.councilRunResult.bear.thesis }}</div>
+          <div *ngIf="currentCouncilRun.councilRunResult.bear.evidence?.length">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-top: 0.5rem;">RISK COUNTERS:</div>
+            <ul style="font-size: 0.8rem; padding-left: 1rem; color: var(--text-main);">
+              <li *ngFor="let ev of currentCouncilRun.councilRunResult.bear.evidence">{{ ev }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Hype Investigator Card -->
+        <div class="card agent-card hype">
+          <div class="agent-header">
+            <div class="agent-name">🔥 HYPE INVESTIGATOR</div>
+            <span class="verdict-tag" [ngClass]="currentCouncilRun.councilRunResult.hype.decision.toLowerCase()">
+              {{ currentCouncilRun.councilRunResult.hype.decision }}
+            </span>
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">
+            Confidence: {{ currentCouncilRun.councilRunResult.hype.confidence }}%
+            <span *ngIf="currentCouncilRun.councilRunResult.hype.is_fallback" style="color: var(--accent-yellow); font-weight: 700;"> ⚠ FALLBACK — LLM UNAVAILABLE</span>
+          </div>
+          <div class="confidence-bar">
+            <div class="confidence-fill" [style.width.%]="currentCouncilRun.councilRunResult.hype.confidence" style="background: var(--accent-purple);"></div>
+          </div>
+          <div class="thesis-text">{{ currentCouncilRun.councilRunResult.hype.thesis }}</div>
+          <div *ngIf="currentCouncilRun.councilRunResult.hype.evidence?.length">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-top: 0.5rem;">SENTIMENT BUZZ:</div>
+            <ul style="font-size: 0.8rem; padding-left: 1rem; color: var(--text-main);">
+              <li *ngFor="let ev of currentCouncilRun.councilRunResult.hype.evidence">{{ ev }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Challenger Agent Card -->
+        <div class="card agent-card challenger">
+          <div class="agent-header">
+            <div class="agent-name">⚔️ CHALLENGER (SYNTHESIS)</div>
+            <span class="verdict-tag" [ngClass]="currentCouncilRun.councilRunResult.challenger.decision.toLowerCase()">
+              {{ currentCouncilRun.councilRunResult.challenger.decision }}
+            </span>
+          </div>
+          <div class="mono" style="font-size: 0.85rem; color: var(--text-muted);">
+            Confidence: {{ currentCouncilRun.councilRunResult.challenger.confidence }}%
+            <span *ngIf="currentCouncilRun.councilRunResult.challenger.confidence_source === 'derived_consensus'" style="color: var(--accent-yellow); font-weight: 700;"> ⟳ DERIVED FROM COUNCIL VOTES (SYNTHESIS LLM UNAVAILABLE)</span>
+            <span *ngIf="currentCouncilRun.councilRunResult.challenger.is_fallback && currentCouncilRun.councilRunResult.challenger.confidence_source !== 'derived_consensus'" style="color: var(--accent-yellow); font-weight: 700;"> ⚠ FALLBACK — VALUE AS REPORTED BY PYTHON</span>
+          </div>
+          <div class="confidence-bar">
+            <div class="confidence-fill" [style.width.%]="currentCouncilRun.councilRunResult.challenger.confidence" style="background: var(--accent-cyan);"></div>
+          </div>
+          <div class="thesis-text">{{ currentCouncilRun.councilRunResult.challenger.thesis }}</div>
+          <div *ngIf="currentCouncilRun.councilRunResult.instrument_decision?.option_details">
+            <div style="font-size: 0.75rem; font-weight: 700; color: var(--accent-cyan); margin-top: 0.5rem;">OPTIONS STRATEGY:</div>
+            <div class="mono" style="font-size: 0.8rem;">
+              {{ currentCouncilRun.councilRunResult.instrument_decision?.option_details?.contract_symbol }}
+              ({{ currentCouncilRun.councilRunResult.instrument_decision?.option_details?.days_to_expiration }} DTE)
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Risk Guardian & Chief Trader Execution Section -->
+      <div *ngIf="currentCouncilRun && !isLoading" class="grid-2">
+        
+        <!-- Deterministic Risk Guardian Section -->
+        <div class="card">
+          <div class="card-title">
+            <span>🛡️ RISK GUARDIAN (DETERMINISTIC BOUNDARY)</span>
+            <span class="mono" [style.color]="currentCouncilRun.riskAssessment.approved ? 'var(--accent-green)' : 'var(--accent-red)'">
+              {{ currentCouncilRun.riskAssessment.approved ? '✓ APPROVED' : '✕ VETOED' }}
+            </span>
+          </div>
+
+          <div class="risk-banner" [ngClass]="{'approved': currentCouncilRun.riskAssessment.approved, 'vetoed': !currentCouncilRun.riskAssessment.approved}">
+            <span>{{ currentCouncilRun.riskAssessment.summaryReason }}</span>
+          </div>
+
+          <div *ngFor="let rule of currentCouncilRun.riskAssessment.ruleResults" class="rule-row">
+            <div>
+              <div class="rule-name">{{ rule.ruleName }}</div>
+              <div class="rule-meta">{{ rule.explanation }}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="mono" style="font-weight: 700;">{{ rule.actualValue }}</div>
+              <span class="rule-status" [ngClass]="{'pass': rule.passed, 'fail': !rule.passed}">
+                {{ rule.passed ? '✓ PASS' : '✕ VETO' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chief Trader & Controlled Execution Section -->
+        <div class="card">
+          <div class="card-title">
+            <span>👤 CHIEF TRADER (EXECUTION AUTHORIZATION)</span>
+            <span class="mono" style="color: var(--accent-yellow);">ALPACA PAPER TRADING</span>
+          </div>
+
+          <!-- TWO-PHASE FLOW: live session status banner -->
+          <div class="risk-banner"
+               [ngClass]="{'approved': currentCouncilRun.session.sessionStatus === 'PENDING_CONFIRMATION',
+                           'vetoed': currentCouncilRun.session.sessionStatus === 'VETOED_BY_RISK_GUARDIAN'
+                                     || currentCouncilRun.session.sessionStatus === 'CANCELED'
+                                     || currentCouncilRun.session.sessionStatus === 'FAILED'}"
+               [style.border-color]="currentCouncilRun.session.sessionStatus === 'EXECUTED' ? 'var(--accent-cyan)' : null"
+               style="margin-bottom: 1rem;">
+            <span *ngIf="currentCouncilRun.session.sessionStatus === 'PENDING_CONFIRMATION'">
+              ⏸ PHASE 1 COMPLETE — Awaiting human confirmation. NO order has been sent to Alpaca yet.
+            </span>
+            <span *ngIf="currentCouncilRun.session.sessionStatus === 'EXECUTED'">
+              ✅ PHASE 2 COMPLETE — Order executed via Alpaca Paper Trading. Broker ID: {{ currentCouncilRun.session.brokerOrderId || currentCouncilRun.session.executedOrder?.brokerOrderId }}
+            </span>
+            <span *ngIf="currentCouncilRun.session.sessionStatus === 'CANCELED'">
+              🚫 CANCELED BY HUMAN — This session can never be executed.
+            </span>
+            <span *ngIf="currentCouncilRun.session.sessionStatus === 'VETOED_BY_RISK_GUARDIAN'">
+              🚫 VETOED BY RISK GUARDIAN — Execution forbidden. {{ currentCouncilRun.session.vetoReason }}
+            </span>
+            <span *ngIf="currentCouncilRun.session.sessionStatus === 'NO_TRADE'">
+              ⚖️ COUNCIL DECIDED NO_TRADE — Nothing to execute.
+            </span>
+            <span *ngIf="currentCouncilRun.session.sessionStatus === 'FAILED'">
+              ❌ EXECUTION FAILED — {{ currentCouncilRun.session.executionFailureReason }}
+            </span>
+          </div>
+
+          <div class="trade-preview-box">
+            <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem;">TRADE PREVIEW METADATA (from persisted session):</div>
+
+            <div class="grid-2" style="margin-bottom: 0.5rem;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">INSTRUMENT</div>
+                <div class="mono" style="font-weight: 700; color: var(--accent-cyan);">
+                  {{ currentCouncilRun.session.proposedInstrument || currentCouncilRun.councilRunResult.instrument_decision?.instrument || 'EQUITY' }}
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">ACTION</div>
+                <div class="mono" style="font-weight: 700; color: var(--accent-green);">
+                  {{ currentCouncilRun.session.proposedAction || currentCouncilRun.councilRunResult.instrument_decision?.action || 'HOLD' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: 0.5rem;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">TARGET ASSET</div>
+                <div class="mono" style="font-weight: 700;">
+                  {{ currentCouncilRun.session.optionContractSymbol || currentCouncilRun.councilRunResult.instrument_decision?.option_details?.contract_symbol || selectedSymbol }}
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">QUANTITY (SIZED BY CHIEF TRADER)</div>
+                <div class="mono" style="font-weight: 700;">
+                  {{ currentCouncilRun.session.proposedQuantity || '—' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: 0.5rem;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">ESTIMATED COST</div>
+                <div class="mono" style="font-weight: 700; color: var(--accent-yellow);">
+                  ${{ currentCouncilRun.session.estimatedCost | number:'1.2-2' }}
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">MARKET PRICE AT ANALYSIS</div>
+                <div class="mono" style="font-weight: 700;">
+                  ${{ currentCouncilRun.session.marketPrice | number:'1.2-2' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Option strategy details — flows from the Python Options Strategist through
+                 .NET InstrumentDecision.OptionLegDetails; only present for OPTION decisions. -->
+            <div *ngIf="currentCouncilRun.councilRunResult.instrument_decision?.option_details as od"
+                 style="margin-top: 0.5rem; padding: 0.6rem; border: 1px solid var(--accent-purple); border-radius: 6px; background: rgba(171, 71, 188, 0.07);">
+              <div style="font-size: 0.8rem; color: var(--accent-purple); font-weight: 700; margin-bottom: 0.4rem;">
+                📈 OPTION STRATEGY (OPTIONS STRATEGIST) — PROPOSED INSTRUMENT: {{ currentCouncilRun.session.proposedInstrument }}
+              </div>
+              <div class="grid-2">
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">CONTRACT TYPE</div>
+                  <div class="mono" style="font-weight: 700;">{{ od.contract_type }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">STRIKE</div>
+                  <div class="mono" style="font-weight: 700;">${{ od.strike | number:'1.2-2' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">EXPIRATION</div>
+                  <div class="mono" style="font-weight: 700;">{{ od.expiration }} ({{ od.days_to_expiration }} DTE)</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">PREMIUM / CONTRACT</div>
+                  <div class="mono" style="font-weight: 700;">${{ od.estimated_premium_per_contract | number:'1.2-2' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">CONTRACTS</div>
+                  <div class="mono" style="font-weight: 700;">{{ od.contracts }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">TOTAL PREMIUM (MAX LOSS)</div>
+                  <div class="mono" style="font-weight: 700; color: var(--accent-red);">${{ od.estimated_total_premium | number:'1.2-2' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">BREAKEVEN</div>
+                  <div class="mono" style="font-weight: 700; color: var(--accent-cyan);">${{ od.breakeven_price | number:'1.2-2' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">CONTRACT SYMBOL</div>
+                  <div class="mono" style="font-weight: 700; font-size: 0.75rem;">{{ od.contract_symbol }}</div>
+                </div>
+              </div>
+            </div>
+            <!-- Equity decision marker: makes stock-vs-option explicit in the preview. -->
+            <div *ngIf="!currentCouncilRun.councilRunResult.instrument_decision?.option_details"
+                 style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
+              📊 PROPOSED INSTRUMENT: <span class="mono" style="color: var(--accent-cyan); font-weight: 700;">{{ currentCouncilRun.session.proposedInstrument || 'EQUITY' }}</span> — plain stock trade, no option leg.
+              <span *ngIf="(currentCouncilRun.councilRunResult.option_chain?.data_quality || 'missing') !== 'ok'"
+                    class="mono" style="display: block; margin-top: 0.25rem; color: var(--accent-yellow);">
+                ⓘ OPTION CHAIN UNAVAILABLE FROM PYTHON (quality: {{ currentCouncilRun.councilRunResult.option_chain?.data_quality || 'missing' }}) — decision restricted to equity; no option contract was fabricated.
+              </span>
+            </div>
+
+            <!-- Controlled Two-Phase Execution Buttons -->
+            <div *ngIf="currentCouncilRun.session.sessionStatus === 'PENDING_CONFIRMATION'" style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+              <button
+                class="btn-primary"
+                style="flex: 1; justify-content: center; padding: 0.8rem;"
+                [disabled]="!currentCouncilRun.riskAssessment.approved || isExecutingOrder"
+                [style.opacity]="currentCouncilRun.riskAssessment.approved ? 1 : 0.4"
+                (click)="confirmExecutePaperTrade()">
+                <span>{{ isExecutingOrder ? 'EXECUTING ORDER...' : (currentCouncilRun.riskAssessment.approved ? '⚡ CONFIRM & EXECUTE VIA ALPACA PAPER' : '🚫 EXECUTION BLOCKED BY RISK GUARDIAN') }}</span>
+              </button>
+              <button
+                style="flex: 1; justify-content: center; padding: 0.8rem; background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: 8px; font-weight: 700; cursor: pointer;"
+                [disabled]="isExecutingOrder"
+                (click)="cancelPendingTrade()">
+                <span>✖ CANCEL — DO NOT TRADE</span>
+              </button>
+            </div>
+            <div *ngIf="currentCouncilRun.session.sessionStatus !== 'PENDING_CONFIRMATION'"
+                 style="margin-top: 1rem; text-align: center; padding: 0.75rem; border: 1px dashed var(--border-color); border-radius: 8px; color: var(--text-muted); font-size: 0.85rem;">
+              Session is <span class="mono" style="color: var(--accent-cyan);">{{ currentCouncilRun.session.sessionStatus }}</span> — no further execution possible from this session.
+              Run the council again to start a new analysis.
+            </div>
+
+            <!-- Execution Result (only after Phase 2) -->
+            <div *ngIf="currentCouncilRun.executionResult && currentCouncilRun.executionResult.executed"
+                 style="margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--accent-cyan); border-radius: 8px; background: rgba(0, 229, 255, 0.05);">
+              <div style="font-size: 0.8rem; color: var(--accent-cyan); font-weight: 700; margin-bottom: 0.35rem;">BROKER EXECUTION RESULT</div>
+              <div class="mono" style="font-size: 0.85rem;">
+                ORDER ID: {{ currentCouncilRun.executionResult.orderResponse?.id }}<br>
+                STATUS: {{ currentCouncilRun.executionResult.orderResponse?.status | uppercase }}
+                <span *ngIf="currentCouncilRun.executionResult.orderResponse?.filled_avg_price">
+                  @ ${{ currentCouncilRun.executionResult.orderResponse?.filled_avg_price }}
+                </span><br>
+                {{ currentCouncilRun.executionResult.message }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 2: PORTFOLIO & POSITIONS ==================== -->
+    <div *ngIf="activeTab === 'portfolio'">
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-title">ALPACA PAPER TRADING ACCOUNT SUMMARY</div>
+        
+        <div class="grid-4">
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">PORTFOLIO VALUE</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-cyan);">${{ accountInfo?.portfolio_value || '100,000.00' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">CASH BALANCE</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-green);">${{ accountInfo?.cash || '100,000.00' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">BUYING POWER</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800;">${{ accountInfo?.buying_power || '400,000.00' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">ACCOUNT STATUS</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-yellow);">{{ accountInfo?.status || 'ACTIVE' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">ACTIVE OPEN POSITIONS</div>
+        <div *ngIf="positions.length === 0" style="color: var(--text-muted); text-align: center; padding: 2rem;">
+          No active positions in Paper Trading account.
+        </div>
+        <table *ngIf="positions.length > 0">
+          <thead>
+            <tr>
+              <th>SYMBOL</th>
+              <th>QTY</th>
+              <th>SIDE</th>
+              <th>AVG PRICE</th>
+              <th>CURRENT PRICE</th>
+              <th>MARKET VALUE</th>
+              <th>UNREALIZED PnL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let pos of positions">
+              <td class="mono" style="font-weight: 700;">{{ pos.symbol }}</td>
+              <td class="mono">{{ pos.qty }}</td>
+              <td class="mono" style="text-transform: uppercase;">{{ pos.side }}</td>
+              <td class="mono">${{ pos.avg_entry_price }}</td>
+              <td class="mono">${{ pos.current_price }}</td>
+              <td class="mono">${{ pos.market_value }}</td>
+              <td class="mono" [style.color]="parseFloat(pos.unrealized_pl) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'">
+                ${{ pos.unrealized_pl }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 3: AUDIT & VETO LOGS ==================== -->
+    <div *ngIf="activeTab === 'audit-history'">
+      <div class="card">
+        <div class="card-title">HISTORIC TRADE COUNCIL DEBATE SESSIONS</div>
+        <div *ngIf="recentSessions.length === 0" style="color: var(--text-muted); text-align: center; padding: 2rem;">
+          No historic council sessions recorded yet. Run a council debate in the Command Center!
+        </div>
+        <table *ngIf="recentSessions.length > 0">
+          <thead>
+            <tr>
+              <th>TIMESTAMP</th>
+              <th>SYMBOL</th>
+              <th>CHALLENGER VERDICT</th>
+              <th>CONFIDENCE</th>
+              <th>PROPOSED INSTRUMENT</th>
+              <th>RISK GUARDIAN STATUS</th>
+              <th>EXECUTED</th>
+              <th>ACTION</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of recentSessions">
+              <td class="mono" style="font-size: 0.8rem;">{{ s.timestamp | date:'short' }}</td>
+              <td class="mono" style="font-weight: 800;">{{ s.symbol }}</td>
+              <td class="mono">
+                <span class="verdict-tag" [ngClass]="s.challengerDecision.toLowerCase()">{{ s.challengerDecision }}</span>
+              </td>
+              <td class="mono">{{ s.challengerConfidence }}%<span *ngIf="isChallengerFallback(s)" title="Challenger synthesis came from a fallback response (LLM unavailable) — the Command Center shows whether the value was derived from council votes or reported by Python"> ⟳</span></td>
+              <td class="mono">{{ s.proposedInstrument }}</td>
+              <td>
+                <span class="rule-status" [ngClass]="{'pass': s.riskGuardianStatus === 'APPROVED', 'fail': s.riskGuardianStatus !== 'APPROVED'}">
+                  {{ s.riskGuardianStatus }}
+                </span>
+              </td>
+              <td class="mono">{{ s.chiefTraderExecuted ? '✓ YES' : '✕ NO' }}</td>
+              <td>
+                <button class="quick-chip" (click)="inspectSession(s)">INSPECT</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Audit Detail Modal/Card -->
+      <div *ngIf="selectedAuditSession" class="card" style="margin-top: 1.5rem; border-color: var(--accent-cyan);">
+        <div class="card-title">
+          <span>INSPECTING SESSION: {{ selectedAuditSession.symbol }} ({{ selectedAuditSession.timestamp | date:'medium' }})</span>
+          <button style="background:none; border:none; color:inherit; cursor:pointer;" (click)="selectedAuditSession = null">✕ CLOSE</button>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div style="font-weight: 700; margin-bottom: 0.5rem;">CHALLENGER THESIS:</div>
+            <div style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 1rem;">{{ selectedAuditSession.challengerThesis }}</div>
+            
+            <div *ngIf="selectedAuditSession.vetoReason" class="risk-banner vetoed">
+              <span>VETO REASON: {{ selectedAuditSession.vetoReason }}</span>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-weight: 700; margin-bottom: 0.5rem;">PROPOSAL DETAILS:</div>
+            <div class="mono" style="font-size: 0.85rem;">Estimated Cost: ${{ selectedAuditSession.estimatedCost | number:'1.2-2' }}</div>
+            <div class="mono" style="font-size: 0.85rem;">Option Symbol: {{ selectedAuditSession.optionContractSymbol || 'N/A (Equity)' }}</div>
+            <div class="mono" style="font-size: 0.85rem;">Broker Order ID: {{ selectedAuditSession.brokerOrderId || 'N/A' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>

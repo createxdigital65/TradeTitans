@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TradeTitans.Api/TradeTitans.Api.csproj" />
+    <Project Path="src/TradeTitans.Core/TradeTitans.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TradeTitans.Tests/TradeTitans.Tests.csproj" />
+  </Folder>
+</Solution>
