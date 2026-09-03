@@ -475,23 +475,42 @@
     <div *ngIf="activeTab === 'portfolio'">
       <div class="card" style="margin-bottom: 1.5rem;">
         <div class="card-title">ALPACA PAPER TRADING ACCOUNT SUMMARY</div>
-        
+
         <div class="grid-4">
           <div>
             <div style="color: var(--text-muted); font-size: 0.85rem;">PORTFOLIO VALUE</div>
-            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-cyan);">${{ accountInfo?.portfolio_value || '100,000.00' }}</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-cyan);">${{ accountInfo?.portfolio_value || '0.00' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">EQUITY</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-cyan);">${{ accountInfo?.equity || '0.00' }}</div>
           </div>
           <div>
             <div style="color: var(--text-muted); font-size: 0.85rem;">CASH BALANCE</div>
-            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-green);">${{ accountInfo?.cash || '100,000.00' }}</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-green);">${{ accountInfo?.cash || '0.00' }}</div>
           </div>
           <div>
             <div style="color: var(--text-muted); font-size: 0.85rem;">BUYING POWER</div>
-            <div class="mono" style="font-size: 1.6rem; font-weight: 800;">${{ accountInfo?.buying_power || '400,000.00' }}</div>
+            <div class="mono" style="font-size: 1.6rem; font-weight: 800;">${{ accountInfo?.buying_power || '0.00' }}</div>
           </div>
+        </div>
+
+        <div class="grid-4" style="margin-top: 1rem;">
           <div>
             <div style="color: var(--text-muted); font-size: 0.85rem;">ACCOUNT STATUS</div>
-            <div class="mono" style="font-size: 1.6rem; font-weight: 800; color: var(--accent-yellow);">{{ accountInfo?.status || 'ACTIVE' }}</div>
+            <div class="mono" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-yellow);">{{ accountInfo?.status || 'UNKNOWN' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">LONG MARKET VALUE</div>
+            <div class="mono" style="font-size: 1.4rem; font-weight: 800;">${{ accountInfo?.long_market_value || '0.00' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">SHORT MARKET VALUE</div>
+            <div class="mono" style="font-size: 1.4rem; font-weight: 800;">${{ accountInfo?.short_market_value || '0.00' }}</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">INITIAL MARGIN</div>
+            <div class="mono" style="font-size: 1.4rem; font-weight: 800;">${{ accountInfo?.initial_margin || '0.00' }}</div>
           </div>
         </div>
       </div>
@@ -499,7 +518,8 @@
       <div class="card">
         <div class="card-title">ACTIVE OPEN POSITIONS</div>
         <div *ngIf="positions.length === 0" style="color: var(--text-muted); text-align: center; padding: 2rem;">
-          No active positions in Paper Trading account.
+          No active positions.<br>
+          <span style="font-size: 0.85rem;">Your Alpaca PAPER account currently has no open positions. Execute an approved PAPER trade to see positions here.</span>
         </div>
         <table *ngIf="positions.length > 0">
           <thead>
@@ -507,10 +527,12 @@
               <th>SYMBOL</th>
               <th>QTY</th>
               <th>SIDE</th>
-              <th>AVG PRICE</th>
+              <th>AVG ENTRY</th>
               <th>CURRENT PRICE</th>
               <th>MARKET VALUE</th>
+              <th>COST BASIS</th>
               <th>UNREALIZED PnL</th>
+              <th>UNREALIZED PnL %</th>
             </tr>
           </thead>
           <tbody>
@@ -521,8 +543,12 @@
               <td class="mono">${{ pos.avg_entry_price }}</td>
               <td class="mono">${{ pos.current_price }}</td>
               <td class="mono">${{ pos.market_value }}</td>
+              <td class="mono">${{ pos.cost_basis }}</td>
               <td class="mono" [style.color]="parseFloat(pos.unrealized_pl) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'">
                 ${{ pos.unrealized_pl }}
+              </td>
+              <td class="mono" [style.color]="parseFloat(pos.unrealized_plpc) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'">
+                {{ (parseFloat(pos.unrealized_plpc) * 100).toFixed(2) }}%
               </td>
             </tr>
           </tbody>

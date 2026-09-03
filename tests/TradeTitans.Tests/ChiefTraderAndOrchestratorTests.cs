@@ -343,7 +343,127 @@ public class ChiefTraderAndOrchestratorTests
         Assert.Equal(CouncilSessionStatus.EXECUTED, session.SessionStatus);
     }
 
+    // --- Hardened symbol / service handling (Issue #1 / #6) ---
+
+    private class StatusFakePythonClient : IPythonAnalyticsClient
+    {
+        public CouncilRunStatusResult StatusResult { get; set; } = new(CouncilRunStatus.Success, TestData.CouncilResult("AAPL", "BUY", "EQUITY", 224.5));
+        public CouncilRunResultDto FallbackResult { get; set; } = TestData.CouncilResult("AAPL", "BUY", "EQUITY", 224.5);
+
+        public Task<bool> GetHealthAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<MarketSnapshotDto?> GetMarketSnapshotAsync(string symbol, CancellationToken cancellationToken = default) =>
+            Task.FromResult<MarketSnapshotDto?>(FallbackResult.Snapshot);
+        public Task<OptionChainSnapshotDto?> GetMarketOptionsAsync(string symbol, CancellationToken cancellationToken = default) =>
+            Task.FromResult<OptionChainSnapshotDto?>(null);
+        public Task<CouncilRunResultDto?> RunCouncilAsync(string symbol, double portfolioValue = 100000.0, bool useOptions = true, CancellationToken cancellationToken = default) =>
+            Task.FromResult<CouncilRunResultDto?>(StatusResult.CouncilResult);
+        public Task<CouncilRunStatusResult> RunCouncilWithStatusAsync(string symbol, double portfolioValue = 100000.0, bool useOptions = true, CancellationToken cancellationToken = default) =>
+            Task.FromResult(StatusResult);
+    }
+
+    [Fact]
+    public async Task Orchestrator_SymbolUnavailable_ThrowsCouncilSymbolUnavailableException_NotGeneric()
+    {
+        var db = CreateDb();
+        var mockAlpaca = new MockAlpacaService();
+        var pythonClient = new StatusFakePythonClient
+        {
+            StatusResult = new CouncilRunStatusResult(CouncilRunStatus.SymbolUnavailable, null, 422, "No data for NESHAT")
+        };
+        var orchestrator = BuildOrchestrator(db, mockAlpaca, pythonClient);
+
+        var ex = await Assert.ThrowsAsync<CouncilSymbolUnavailableException>(
+            () => orchestrator.RunFullCouncilDebateAsync("NESHAT"));
+
+        Assert.Equal("NESHAT", ex.Symbol);
+        Assert.Contains("NESHAT", ex.Message);
+        // No session should have been persisted for an unavailable symbol.
+        Assert.Equal(0, db.TradeCouncilSessions.Count());
+    }
+
+    [Fact]
+    public async Task Orchestrator_ServiceUnavailable_ThrowsCouncilServiceException()
+    {
+        var db = CreateDb();
+        var mockAlpaca = new MockAlpacaService();
+        var pythonClient = new StatusFakePythonClient
+        {
+            StatusResult = new CouncilRunStatusResult(CouncilRunStatus.ServiceUnavailable, null, 503, "Service down")
+        };
+        var orchestrator = BuildOrchestrator(db, mockAlpaca, pythonClient);
+
+        await Assert.ThrowsAsync<CouncilServiceException>(
+            () => orchestrator.RunFullCouncilDebateAsync("AAPL"));
+
+        Assert.Equal(0, db.TradeCouncilSessions.Count());
+    }
+
+    [Fact]
+    public async Task Orchestrator_UnexpectedError_ThrowsCouncilServiceException()
+    {
+        var db = CreateDb();
+        var mockAlpaca = new MockAlpacaService();
+        var pythonClient = new StatusFakePythonClient
+        {
+            StatusResult = new CouncilRunStatusResult(CouncilRunStatus.UnexpectedError, null, null, "Malformed response")
+        };
+        var orchestrator = BuildOrchestrator(db, mockAlpaca, pythonClient);
+
+        var ex = await Assert.ThrowsAsync<CouncilServiceException>(
+            () => orchestrator.RunFullCouncilDebateAsync("AAPL"));
+
+        // The orchestrator surfaces the detail from the Python client boundary (no raw 500/stack trace).
+        Assert.Contains("Malformed response", ex.Message);
+        Assert.Equal(0, db.TradeCouncilSessions.Count());
+    }
+
+    [Fact]
+    public async Task Orchestrator_UnexpectedError_NoDetail_FallsBackToGenericMessage()
+    {
+        var db = CreateDb();
+        var mockAlpaca = new MockAlpacaService();
+        var pythonClient = new StatusFakePythonClient
+        {
+            StatusResult = new CouncilRunStatusResult(CouncilRunStatus.UnexpectedError, null, null, null)
+        };
+        var orchestrator = BuildOrchestrator(db, mockAlpaca, pythonClient);
+
+        var ex = await Assert.ThrowsAsync<CouncilServiceException>(
+            () => orchestrator.RunFullCouncilDebateAsync("AAPL"));
+
+        Assert.Contains("Something went wrong", ex.Message);
+        Assert.Equal(0, db.TradeCouncilSessions.Count());
+    }
+
+    [Fact]
+    public async Task Orchestrator_ValidNoTrade_DoesNotThrow_IsReturnedAsSuccess()
+    {
+        var db = CreateDb();
+        var mockAlpaca = new MockAlpacaService();
+        var pythonClient = new StatusFakePythonClient
+        {
+            StatusResult = new CouncilRunStatusResult(CouncilRunStatus.Success, TestData.CouncilResult("AAPL", "NO_TRADE", "EQUITY", 224.5))
+        };
+        var orchestrator = BuildOrchestrator(db, mockAlpaca, pythonClient);
+
+        var response = await orchestrator.RunFullCouncilDebateAsync("AAPL");
+
+        Assert.NotNull(response);
+        Assert.Equal(CouncilSessionStatus.NO_TRADE, response.Session.SessionStatus);
+        Assert.Equal(0, response.Session.ProposedQuantity);
+    }
+
     private static TradeCouncilOrchestrator BuildOrchestrator(TradeTitansDbContext db, MockAlpacaService mockAlpaca, FakePythonClient? pythonClient = null)
+    {
+        return BuildOrchestratorInternal(db, mockAlpaca, pythonClient ?? new FakePythonClient());
+    }
+
+    private static TradeCouncilOrchestrator BuildOrchestrator(TradeTitansDbContext db, MockAlpacaService mockAlpaca, StatusFakePythonClient pythonClient)
+    {
+        return BuildOrchestratorInternal(db, mockAlpaca, pythonClient);
+    }
+
+    private static TradeCouncilOrchestrator BuildOrchestratorInternal(TradeTitansDbContext db, MockAlpacaService mockAlpaca, IPythonAnalyticsClient pythonClient)
     {
         var riskGuardian = new RiskGuardianService(new IRiskRule[]
         {
@@ -356,7 +476,7 @@ public class ChiefTraderAndOrchestratorTests
         var chiefTrader = new ChiefTraderService(mockAlpaca, NullLogger<ChiefTraderService>.Instance);
 
         return new TradeCouncilOrchestrator(
-            pythonClient ?? new FakePythonClient(),
+            pythonClient,
             mockAlpaca,
             riskGuardian,
             chiefTrader,
@@ -395,6 +515,9 @@ public class ChiefTraderAndOrchestratorTests
 
         public Task<CouncilRunResultDto?> RunCouncilAsync(string symbol, double portfolioValue = 100000.0, bool useOptions = true, CancellationToken cancellationToken = default) =>
             Task.FromResult<CouncilRunResultDto?>(Result);
+
+        public Task<CouncilRunStatusResult> RunCouncilWithStatusAsync(string symbol, double portfolioValue = 100000.0, bool useOptions = true, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new CouncilRunStatusResult(CouncilRunStatus.Success, Result));
     }
 
     private class MockAlpacaService : IAlpacaPaperService

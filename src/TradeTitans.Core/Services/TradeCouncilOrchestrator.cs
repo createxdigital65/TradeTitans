@@ -42,11 +42,28 @@ public class TradeCouncilOrchestrator : ITradeCouncilOrchestrator
     {
         _logger.LogInformation("Starting Trade Council Orchestration for symbol {Symbol}", symbol);
 
-        // 1. Run the Python council debate.
-        var councilResult = await _pythonClient.RunCouncilAsync(symbol, portfolioValue, useOptions, cancellationToken);
-        if (councilResult == null)
+        // 1. Run the Python council debate — use the status-rich call so we can throw a domain-specific
+        //    exception the controller maps to a meaningful HTTP status. We never fabricate a demo
+        //    session here; if data cannot be retrieved, the workflow stops with a clear message.
+        var statusResult = await _pythonClient.RunCouncilWithStatusAsync(symbol, portfolioValue, useOptions, cancellationToken);
+        CouncilRunResultDto councilResult;
+        switch (statusResult.Status)
         {
-            throw new InvalidOperationException($"Failed to receive response from Python Council service for {symbol}");
+            case CouncilRunStatus.Success when statusResult.CouncilResult != null:
+                councilResult = statusResult.CouncilResult;
+                break;
+            case CouncilRunStatus.SymbolUnavailable:
+                // Analytics service reachable but symbol rejected. Stop the workflow cleanly — do
+                // NOT fabricate a demo session, do NOT proceed to trade preview.
+                throw new CouncilSymbolUnavailableException(symbol,
+                    $"Unable to retrieve market data for {symbol}. Please verify the symbol or try another supported symbol.");
+            case CouncilRunStatus.ServiceUnavailable:
+                throw new CouncilServiceException(
+                    "Market analytics service is currently unavailable. Please try again later.");
+            case CouncilRunStatus.UnexpectedError:
+            default:
+                throw new CouncilServiceException(
+                    statusResult.Detail ?? "Something went wrong while processing the request. Please try again.");
         }
 
         // 1b. Normalize synthesis confidence: when the Python challenger agent's LLM call fails it

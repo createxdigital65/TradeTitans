@@ -1,6 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, catchError, map, of } from 'rxjs';
+
+export interface CouncilRunError {
+  message: string;
+  code?: string;
+}
 import {
   MarketSnapshot,
   OptionChainSnapshot,
@@ -10,12 +15,13 @@ import {
   AlpacaPosition,
   CouncilRunResult
 } from '../models/trade-titans.models';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TradeTitansService {
-  private readonly baseUrl = 'http://localhost:5000/api';
+  private readonly baseUrl = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 
@@ -27,7 +33,16 @@ export class TradeTitansService {
 
   getSnapshot(symbol: string): Observable<MarketSnapshot | null> {
     return this.http.get<MarketSnapshot>(`${this.baseUrl}/commandcenter/snapshot/${symbol}`).pipe(
-      catchError(() => of(this.getMockSnapshot(symbol)))
+      catchError((err) => {
+        // Only fall back to mock data when the backend is genuinely unreachable (status 0).
+        // If the backend IS reachable but the symbol has no data (404/422), show a clear empty
+        // state — never fabricate data for an unsupported symbol.
+        if (err?.status === 0) {
+          console.warn('Backend unreachable, loading mock snapshot fallback:', err);
+          return of(this.getMockSnapshot(symbol));
+        }
+        return of(null);
+      })
     );
   }
 
@@ -37,25 +52,35 @@ export class TradeTitansService {
     );
   }
 
-  runCouncil(symbol: string, portfolioValue: number = 100000, useOptions: boolean = true): Observable<FullCouncilRunResponse | null> {
+  runCouncil(symbol: string, portfolioValue: number = 100000, useOptions: boolean = true): Observable<{ result: FullCouncilRunResponse | null; error?: CouncilRunError }> {
     return this.http.post<FullCouncilRunResponse>(`${this.baseUrl}/council/run/${symbol}?portfolioValue=${portfolioValue}&useOptions=${useOptions}`, {}).pipe(
-      catchError((err) => {
-        // CASE 3: Backend reachable but upstream symbol failure (HTTP 502).
-        // The Python analytics service rejected the symbol — do NOT fabricate a demo session.
-        if (err?.status === 502) {
-          const upstreamMsg = err?.error?.error || 'Market analytics service could not process this symbol.';
-          console.error(`Symbol unavailable for ${symbol}:`, upstreamMsg);
-          return of(null);
+      map((res) => ({ result: res, error: undefined as CouncilRunError | undefined })),
+      catchError((err): Observable<{ result: FullCouncilRunResponse | null; error?: CouncilRunError }> => {
+        // CASE A: Symbol unavailable (HTTP 422) — analytics service reachable but market data
+        // could not be retrieved for this symbol (invalid / unsupported / no-data). Stop the
+        // workflow cleanly. Do NOT fabricate a demo session.
+        if (err?.status === 422) {
+          const msg = err?.error?.error || `Unable to retrieve market data for ${symbol}. Please verify the symbol or try another supported symbol.`;
+          console.error(`Symbol unavailable for ${symbol}:`, msg);
+          return of({ result: null, error: { message: msg, code: err?.error?.error_code } });
         }
-        // CASE 4: Backend genuinely unavailable (connection refused, network error, status 0).
-        // Retain demo fallback for demonstration purposes — clearly labeled, Confirm disabled.
+        // CASE B: Analytics service unavailable (HTTP 503) — Python service down, timed out, or
+        // network-unreachable. Surface a "try again later" message. Do NOT fabricate a demo session.
+        if (err?.status === 503) {
+          const msg = err?.error?.error || 'Market analytics service is currently unavailable. Please try again later.';
+          console.error(`Analytics service unavailable:`, msg);
+          return of({ result: null, error: { message: msg, code: err?.error?.error_code } });
+        }
+        // CASE C: Backend genuinely unreachable (connection refused, network error, status 0).
+        // Retain demo fallback ONLY in this case — clearly labeled, Confirm disabled, never executes.
         if (err?.status === 0) {
           console.error('Backend unreachable, loading mock fallback:', err);
-          return of(this.getMockFullCouncilRun(symbol));
+          return of({ result: this.getMockFullCouncilRun(symbol) });
         }
-        // Any other unexpected error — do not fabricate data.
-        console.error(`Unexpected error running council for ${symbol}:`, err);
-        return of(null);
+        // CASE D: Any other unexpected backend error (HTTP 500, etc.) — do not fabricate data.
+        const msg = err?.error?.error || 'Something went wrong while processing the request. Please try again.';
+        console.error(`Unexpected error running council for ${symbol}:`, msg);
+        return of({ result: null, error: { message: msg, code: err?.error?.error_code } });
       })
     );
   }
@@ -100,8 +125,9 @@ export class TradeTitansService {
     return this.http.get<AlpacaAccount>(`${this.baseUrl}/portfolio/account`).pipe(
       catchError(() => of({
         id: 'mock-acc-123', account_number: 'PA3MOCK12345', status: 'ACTIVE', currency: 'USD',
-        buying_power: '400000.00', cash: '100000.00', portfolio_value: '100000.00', equity: '100000.00'
-      }))
+        buying_power: '400000.00', cash: '100000.00', portfolio_value: '100000.00', equity: '100000.00',
+        long_market_value: '0.00', short_market_value: '0.00', initial_margin: '0.00'
+      } as AlpacaAccount))
     );
   }
 

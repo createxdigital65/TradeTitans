@@ -90,18 +90,24 @@ export class App implements OnInit {
     this.showNotification('Running AI Council debate (Bull -> Bear -> Hype -> Challenger)...', 'warning');
 
     const portfolioVal = this.accountInfo ? parseFloat(this.accountInfo.portfolio_value) : 100000;
-    this.tradeTitansService.runCouncil(this.selectedSymbol, portfolioVal, true).subscribe(result => {
-      this.currentCouncilRun = result;
+    this.tradeTitansService.runCouncil(this.selectedSymbol, portfolioVal, true).subscribe(response => {
+      const result = response?.result;
+      this.currentCouncilRun = result ?? null;
       this.isLoading = false;
+      if (response?.error) {
+        // Distinct failure modes — each surfaced with a clear, professional message.
+        // The workflow is stopped. No demo session is created. No trade preview is shown.
+        this.showNotification(response.error.message, 'danger');
+        return;
+      }
       if (result) {
-        if (result.riskAssessment.approved) {
+        if (result.session.sessionStatus === 'NO_TRADE') {
+          this.showNotification('NO TRADE — The AI Council did not identify a sufficiently strong opportunity within the configured decision and risk criteria.', 'warning');
+        } else if (result.riskAssessment.approved) {
           this.showNotification('AI Council finished. Risk Guardian APPROVED trade proposal!', 'success');
         } else {
           this.showNotification('AI Council finished. VETOED BY RISK GUARDIAN!', 'danger');
         }
-      } else {
-        // CASE 3: Symbol unsupported by upstream — no demo data fabricated.
-        this.showNotification('Symbol unavailable — the market analytics service could not provide data for this symbol. Please try another supported symbol.', 'danger');
       }
     });
   }

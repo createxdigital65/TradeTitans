@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
+using TradeTitans.Core.Interfaces;
 using TradeTitans.Core.Services;
 using Xunit;
 
@@ -80,6 +81,83 @@ public class PythonAnalyticsClientTests
         var result = await client.RunCouncilAsync("AAPL");
 
         Assert.Null(result);
+    }
+
+    // --- RunCouncilWithStatusAsync tests — the hardened boundary ---
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_Success_ReturnsSuccess()
+    {
+        var client = CreateClient(new StubHttpHandler(HttpStatusCode.OK, ValidCouncilJson));
+
+        var result = await client.RunCouncilWithStatusAsync("AAPL");
+
+        Assert.Equal(CouncilRunStatus.Success, result.Status);
+        Assert.NotNull(result.CouncilResult);
+        Assert.Equal("AAPL", result.CouncilResult!.Symbol);
+    }
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_404_ReturnsSymbolUnavailable()
+    {
+        var client = CreateClient(new StubHttpHandler(HttpStatusCode.NotFound, "Not found: symbol INVALIDXYZ"));
+
+        var result = await client.RunCouncilWithStatusAsync("INVALIDXYZ");
+
+        Assert.Equal(CouncilRunStatus.SymbolUnavailable, result.Status);
+        Assert.Null(result.CouncilResult);
+    }
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_422_ReturnsSymbolUnavailable()
+    {
+        var client = CreateClient(new StubHttpHandler((HttpStatusCode)422, "No data for symbol NESHAT"));
+
+        var result = await client.RunCouncilWithStatusAsync("NESHAT");
+
+        Assert.Equal(CouncilRunStatus.SymbolUnavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_500_WithSymbolMarker_ReturnsSymbolUnavailable()
+    {
+        // The hosted Python service returns HTTP 500 for invalid symbols. When the body names the
+        // symbol as unknown, we must classify it as SymbolUnavailable, NOT ServiceUnavailable.
+        var client = CreateClient(new StubHttpHandler(HttpStatusCode.InternalServerError, "Unknown ticker NESHAT"));
+
+        var result = await client.RunCouncilWithStatusAsync("NESHAT");
+
+        Assert.Equal(CouncilRunStatus.SymbolUnavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_500_Generic_ReturnsServiceUnavailable()
+    {
+        var client = CreateClient(new StubHttpHandler(HttpStatusCode.InternalServerError, "Internal server error"));
+
+        var result = await client.RunCouncilWithStatusAsync("AAPL");
+
+        Assert.Equal(CouncilRunStatus.ServiceUnavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_Timeout_ReturnsServiceUnavailable()
+    {
+        var client = CreateClient(new TimeoutHttpHandler());
+
+        var result = await client.RunCouncilWithStatusAsync("AAPL");
+
+        Assert.Equal(CouncilRunStatus.ServiceUnavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task RunCouncilWithStatusAsync_503_ReturnsServiceUnavailable()
+    {
+        var client = CreateClient(new StubHttpHandler(HttpStatusCode.ServiceUnavailable, "Service temporarily unavailable"));
+
+        var result = await client.RunCouncilWithStatusAsync("AAPL");
+
+        Assert.Equal(CouncilRunStatus.ServiceUnavailable, result.Status);
     }
 
     private static PythonAnalyticsClient CreateClient(HttpMessageHandler handler)

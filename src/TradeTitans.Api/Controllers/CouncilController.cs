@@ -21,6 +21,14 @@ public class CouncilController : ControllerBase
     /// <summary>
     /// Runs the AI council debate and Risk Guardian evaluation, persists the session and returns a
     /// TRADE PREVIEW. It never executes an order — the user must confirm via POST sessions/{id}/confirm.
+    ///
+    /// Returns differentiated status codes so the Angular client can distinguish failure modes:
+    ///   200 — success (valid council session, including legitimate NO_TRADE verdicts)
+    ///   422 — symbol unavailable: analytics service reachable but market data could not be retrieved
+    ///         for the requested symbol (invalid / unsupported / no-data symbol)
+    ///   503 — analytics service unavailable: Python service down, timed out, or network-unreachable
+    ///   500 — unexpected backend error
+    /// A cancelled / vetoed / NO_TRADE session is still a 200 with the appropriate session state.
     /// </summary>
     [HttpPost("run/{symbol}")]
     public async Task<IActionResult> RunCouncil(string symbol, [FromQuery] double portfolioValue = 100000.0, [FromQuery] bool useOptions = true, CancellationToken cancellationToken = default)
@@ -28,16 +36,31 @@ public class CouncilController : ControllerBase
         try
         {
             var result = await _orchestrator.RunFullCouncilDebateAsync(symbol, portfolioValue, useOptions, cancellationToken);
+            if (result == null)
+            {
+                // Orchestrator chose not to return a session (shouldn't happen via current path).
+                return StatusCode(500, new { error = "Council orchestrator returned no result.", error_code = "COUNCIL_NO_RESULT" });
+            }
             return Ok(result);
+        }
+        catch (CouncilServiceException ex)
+        {
+            // Python analytics service is down / timed out / unreachable. 503 = try again later.
+            return StatusCode(503, new { error = ex.Message, error_code = "ANALYTICS_SERVICE_UNAVAILABLE" });
+        }
+        catch (CouncilSymbolUnavailableException ex)
+        {
+            // Analytics service reachable but symbol rejected (4xx or 5xx-with-symbol-marker).
+            // 422 = well-formed request, semantically invalid symbol for the upstream data provider.
+            return StatusCode(422, new { error = ex.Message, error_code = "SYMBOL_UNAVAILABLE", symbol = ex.Symbol });
         }
         catch (InvalidOperationException ex)
         {
-            // Upstream Python analytics service failure / invalid payload.
-            return StatusCode(502, new { error = ex.Message });
+            return StatusCode(500, new { error = ex.Message, error_code = "INVALID_OPERATION" });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message });
+            return StatusCode(500, new { error = ex.Message, error_code = "UNEXPECTED_ERROR" });
         }
     }
 

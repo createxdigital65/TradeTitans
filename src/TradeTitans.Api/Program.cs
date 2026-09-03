@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using TradeTitans.Core.Data;
 using TradeTitans.Core.Interfaces;
@@ -18,29 +20,35 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Trade Titans API Tower", Version = "v1" });
 });
 
-// Configure CORS for Angular Frontend
+// Configure CORS - support multiple origins from configuration
+var allowedOriginsConfig = builder.Configuration["Cors:AllowedOrigins"];
+var allowedOrigins = !string.IsNullOrWhiteSpace(allowedOriginsConfig)
+    ? allowedOriginsConfig.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    : new[] { "http://localhost:4200", "https://localhost:4200" };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200", "https://localhost:4200")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
 });
 
-// SQLite Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+// SQLite Database - use configurable path
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Data Source=tradetitans.db";
 builder.Services.AddDbContext<TradeTitansDbContext>(options =>
     options.UseSqlite(connectionString));
 
 // Register HTTP Clients
 var pythonBaseUrl = builder.Configuration["PythonService:BaseUrl"] ?? "https://trade-titan-seven.vercel.app";
+var pythonTimeoutSeconds = builder.Configuration.GetValue<int?>("PythonService:TimeoutSeconds") ?? 120;
 builder.Services.AddHttpClient<IPythonAnalyticsClient, PythonAnalyticsClient>(client =>
 {
     client.BaseAddress = new Uri(pythonBaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(120); // Council LLM chain on serverless Python can be slow; avoids challenger timeout fallbacks.
+    client.Timeout = TimeSpan.FromSeconds(pythonTimeoutSeconds);
 });
 
 var alpacaBaseUrl = builder.Configuration["Alpaca:BaseUrl"] ?? "https://paper-api.alpaca.markets";
@@ -67,6 +75,13 @@ builder.Services.AddScoped<IRiskRule, DataQualityRule>();
 builder.Services.AddScoped<IRiskGuardianService, RiskGuardianService>();
 builder.Services.AddScoped<IChiefTraderService, ChiefTraderService>();
 builder.Services.AddScoped<ITradeCouncilOrchestrator, TradeCouncilOrchestrator>();
+
+// Configure forwarded headers for reverse proxy scenarios (e.g., MonsterASP.NET)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                             | ForwardedHeaders.XForwardedProto;
+});
 
 var app = builder.Build();
 
@@ -100,14 +115,30 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Enable Swagger in both Development and when explicitly configured
+var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled") || app.Environment.IsDevelopment();
+if (swaggerEnabled)
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Trade Titans API Tower v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
+// Use forwarded headers before other middleware
+app.UseForwardedHeaders();
 app.UseCors("AllowAngular");
 app.UseAuthorization();
 app.MapControllers();
+
+// Add a simple health endpoint for deployment verification
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "ok",
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.ApplicationName
+}));
 
 app.Run();
