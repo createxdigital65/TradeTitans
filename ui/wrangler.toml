@@ -1,0 +1,7 @@
+name = "tradetitans"
+compatibility_date = "2026-09-04"
+main = "./index.js"
+
+[assets]
+directory = "./dist/browser"
+not_found_handling = "single-page-application"
